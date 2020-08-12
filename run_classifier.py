@@ -333,9 +333,9 @@ class MrpcProcessor(DataProcessor):
     return examples
 
 class MyTaskProcessor(DataProcessor):
-  def get_train_examples(self, data_dir):
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+    def get_train_examples(self, data_dir):
+          return self._create_examples(
+              self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
 
     def get_dev_examples(self, data_dir):
         return self._create_examples(
@@ -349,7 +349,7 @@ class MyTaskProcessor(DataProcessor):
     def _read_tsv(cls, input_file, quotechar=None):
         """读取 tsv 的工具方法"""
         with tf.gfile.Open(input_file, "r") as f:
-        reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
+          reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
         lines = []
         for line in reader:
             lines.append(line)
@@ -362,11 +362,11 @@ class MyTaskProcessor(DataProcessor):
             if i == 0:
                 continue
             guid = "%s-%s" % (set_type, i)
-            text_a = tokenization.convert_to_unicode(line[1])
+            text_a = tokenization.convert_to_unicode(line[0])
             if set_type == "test": # 对于测试集，去除真实标记
                 label = "0"
             else:
-                label = tokenization.convert_to_unicode(line[0])
+                label = tokenization.convert_to_unicode(line[1])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
