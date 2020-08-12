@@ -332,6 +332,47 @@ class MrpcProcessor(DataProcessor):
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
 
+class MyTaskProcessor(DataProcessor):
+  def get_train_examples(self, data_dir):
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
+    @classmethod
+    def _read_tsv(cls, input_file, quotechar=None):
+        """读取 tsv 的工具方法"""
+        with tf.gfile.Open(input_file, "r") as f:
+        reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
+        lines = []
+        for line in reader:
+            lines.append(line)
+        return lines
+
+    def _create_examples(self, lines, set_type):
+        """创建 InputExample 对象的工具方法"""
+        examples = []
+        for (i, line) in enumerate(lines):
+            if i == 0:
+                continue
+            guid = "%s-%s" % (set_type, i)
+            text_a = tokenization.convert_to_unicode(line[1])
+            if set_type == "test": # 对于测试集，去除真实标记
+                label = "0"
+            else:
+                label = tokenization.convert_to_unicode(line[0])
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+        return examples
+
+    def get_labels(self):
+      return ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39']
 
 class ColaProcessor(DataProcessor):
   """Processor for the CoLA data set (GLUE version)."""
@@ -788,6 +829,7 @@ def main(_):
       "mnli": MnliProcessor,
       "mrpc": MrpcProcessor,
       "xnli": XnliProcessor,
+      "mytask": MyTaskProcessor,
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
