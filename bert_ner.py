@@ -331,6 +331,42 @@ class MrpcProcessor(DataProcessor):
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
+  
+class NerProcessor(DataProcessor):
+    def get_train_examples(self, data_dir):
+          return self._create_examples(
+              self._read_txt(os.path.join(data_dir, "train.txt")), "train")
+
+    def get_dev_examples(self, data_dir):
+        return self._create_examples(
+            self._read_txt(os.path.join(data_dir, "dev.txt")), "dev")
+
+    def get_test_examples(self, data_dir):
+        return self._create_examples(
+            self._read_txt(os.path.join(data_dir, "test.txt")), "test")
+
+    @classmethod
+    def _read_txt(cls, input_file, quotechar=None):
+        """读取 txt 的工具方法"""
+        with tf.gfile.Open(input_file, "r") as f:
+          reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
+        lines = []
+        for line in reader:
+            lines.append(line)
+        return lines
+
+    def _create_examples(self, lines, set_type):
+        """创建 InputExample 对象的工具方法"""
+        examples = []
+        for (i, line) in enumerate(lines):
+            guid = "%s-%s" % (set_type, i)
+            texts = tokenization.convert_to_unicode(line[1])
+            labels = tokenization.convert_to_unicode(line[0])
+            examples.append(InputExample(guid=guid, text=texts, label=labels))
+        return examples
+
+    def get_labels(self):
+      return return ["[PAD]","B-MISC", "I-MISC", "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "X","[CLS]","[SEP]"]
 
 class MyTaskProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
@@ -622,38 +658,29 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
       input_mask=input_mask,
       token_type_ids=segment_ids,
       use_one_hot_embeddings=use_one_hot_embeddings)
+  
+  # obtained embedding output from bert
+  embedding = model.get_sequence_output()
 
-  # In the demo, we are doing a simple classification task on the entire
-  # segment.
-  #
-  # If you want to use the token-level output, use model.get_sequence_output()
-  # instead.
-  output_layer = model.get_pooled_output()
+  # 算序列真实长度
+  max_seq_length = embedding.shape[1].value
+  
+  used = tf.sign(tf.abs(input_ids))
+  lengths = tf.reduce_sum(used, reduction_indices=1) 
+  # 添加CRF output layer
+  blstm_crf = BLSTM_CRF(embedded_chars=embedding, 
+                        hidden_unit=lstm_size, 
+                        cell_type=cell, 
+                        num_layers=num_layers,
+                        dropout_rate=dropout_rate, 
+                        initializers=initializers, 
+                        num_labels=num_labels,
+                        seq_length=max_seq_length, 
+                        labels=labels,
+                        lengths=lengths, 
+                        is_training=is_training)
 
-  hidden_size = output_layer.shape[-1].value
-
-  output_weights = tf.get_variable(
-      "output_weights", [num_labels, hidden_size],
-      initializer=tf.truncated_normal_initializer(stddev=0.02))
-
-  output_bias = tf.get_variable(
-      "output_bias", [num_labels], initializer=tf.zeros_initializer())
-
-  with tf.variable_scope("loss"):
-    if is_training:
-      # I.e., 0.1 dropout
-      output_layer = tf.nn.dropout(output_layer, keep_prob=0.9)
-
-    logits = tf.matmul(output_layer, output_weights, transpose_b=True)
-    logits = tf.nn.bias_add(logits, output_bias)
-    probabilities = tf.nn.softmax(logits, axis=-1)
-    log_probs = tf.nn.log_softmax(logits, axis=-1)
-
-    one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
-
-    per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
-    loss = tf.reduce_mean(per_example_loss)
-
+  rst = blstm_crf.add_blstm_crf_layer(crf_only=True)
     return (loss, per_example_loss, logits, probabilities)
 
 
@@ -830,6 +857,7 @@ def main(_):
       "mrpc": MrpcProcessor,
       "xnli": XnliProcessor,
       "mytask": MyTaskProcessor,
+      "ner": NerProcessor,
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
